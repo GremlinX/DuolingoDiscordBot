@@ -123,7 +123,8 @@ public class DiscordBotService : IHostedService
                 {
                     try
                     {
-                        await channel.SendMessageAsync(newsMessage);
+                        var newsMessageSent = await channel.SendMessageAsync(newsMessage);
+                        Console.WriteLine($"[BOT] As notícias foram enviadas com sucesso! {newsMessageSent}");
                     }
                     catch (Discord.Net.HttpException ex)
                     {
@@ -155,8 +156,8 @@ public class DiscordBotService : IHostedService
             if (data?.Results == null || data.Results.Count == 0)
                 return "Não foram encontradas notícias.";
 
-            // Pegue só as 5 mais recentes (ou mude o número)
-            var selected = data.Results.Take(5).ToList();
+            // Pegue só as 4 mais recentes (ou mude o número)
+            var selected = data.Results.Take(4).ToList();
 
             string msg = "📰 **Resumo das últimas notícias**\n\n";
             foreach (var article in selected)
