@@ -1,0 +1,6 @@
+@DiscordDuolingo_HostAddress = http://localhost:5273
+
+GET {{DiscordDuolingo_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
