@@ -1,5 +1,8 @@
 ﻿using Discord;
 using Discord.WebSocket;
+using DiscordDuolingo.Models;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
+using Newtonsoft.Json;
 
 namespace DiscordDuolingo.Services;
 
@@ -20,6 +23,21 @@ public class DiscordBotService : IHostedService
         });
     }
 
+    private Task OnReadyAsync()
+    {
+        Console.WriteLine($"[BOT] READY — Guilds carregados: {_client.Guilds.Count}");
+
+        foreach (var guild in _client.Guilds)
+        {
+            Console.WriteLine($"[BOT] Servidor disponível: {guild.Name}");
+        }
+
+        Console.WriteLine("[BOT] Iniciando loop de lembretes e notícias...");
+        _ = ReminderLoop();
+
+        return Task.CompletedTask;
+    }
+
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         try
@@ -32,6 +50,8 @@ public class DiscordBotService : IHostedService
                 return Task.CompletedTask;
             };
 
+            _client.Ready += OnReadyAsync;
+
             string token = _config["DISCORD_TOKEN"]!;
 
             Console.WriteLine("[BOT] TOKEN LIDO: " + (token != null ? "OK" : "NULO"));
@@ -40,14 +60,12 @@ public class DiscordBotService : IHostedService
             await _client.StartAsync();
 
             Console.WriteLine("[BOT] Conectado! Iniciando loop...");
-            _ = ReminderLoop();
         }
         catch (Exception ex)
         {
             Console.WriteLine("[BOT ERRO] " + ex.ToString());
         }
     }
-
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
@@ -98,8 +116,63 @@ public class DiscordBotService : IHostedService
                 {
                     Console.WriteLine($"[BOT] Não existe canal #span no servidor {guild.Name}");
                 }
+
+                // Envia notícias
+                var newsMessage = await GetNewsAsync();
+                if (newsMessage != null && channel != null)
+                {
+                    try
+                    {
+                        await channel.SendMessageAsync(newsMessage);
+                    }
+                    catch (Discord.Net.HttpException ex)
+                    {
+                        Console.WriteLine($"[BOT] Não foi possível enviar notícias no canal #span do servidor {guild.Name}: {ex.Message}");
+                    }
+                }
             }
 
+        }
+    }
+
+    private async Task<string?> GetNewsAsync()
+    {
+        string newsApiToken = _config["NEWSDATA_API_TOKEN"]!;
+
+        using var client = new HttpClient();
+
+        try
+        {
+            string url =
+                $"https://newsdata.io/api/1/latest?apikey={newsApiToken}" +
+                $"&country=br" +
+                $"&domainurl=correiobraziliense.com.br" +
+                $"&removeduplicate=1";
+
+            var response = await client.GetStringAsync(url);
+            var data = JsonConvert.DeserializeObject<NewsApiResponse>(response);
+
+            if (data?.Results == null || data.Results.Count == 0)
+                return "Não foram encontradas notícias.";
+
+            // Pegue só as 5 mais recentes (ou mude o número)
+            var selected = data.Results.Take(5).ToList();
+
+            string msg = "📰 **Resumo das últimas notícias**\n\n";
+            foreach (var article in selected)
+            {
+                msg += $"**{article.Title}**\n";
+                msg += $"{article.Description}\n";
+                msg += $"🔗 {article.Link}\n\n";
+            }
+
+            return msg;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erro ao buscar notícias: {ex.Message}");
+            //return "Erro ao buscar notícias.";
+            return null;
         }
     }
 
